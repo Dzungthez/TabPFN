@@ -38,66 +38,45 @@ class CustomUnpickler(pickle.Unpickler):
         else:
             return super().find_class(module, name)
 
-def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='', only_inference=True):
+def load_model_workflow(i, e, add_name, base_path, checkpoint_local_path, device='cpu', eval_addition='', only_inference=True):
     """
-    Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.
+    Workflow for loading a model from a local checkpoint.
 
-    :param i:
-    :param e:
-    :param eval_positions_valid:
-    :param add_name:
-    :param base_path:
-    :param device:
-    :param eval_addition:
-    :return:
+    :param i: Index or identifier (unused in this context).
+    :param e: Epoch number (unused in this context since we are loading from a specific path).
+    :param add_name: Additional name identifier for the model.
+    :param base_path: Base path of the directory.
+    :param checkpoint_local_path: Local path to the checkpoint file.
+    :param device: Device to load the model on.
+    :param eval_addition: Additional string for result file naming.
+    :param only_inference: Whether to load the model for inference only.
+    :return: Loaded model, configuration, and results file path.
     """
-    def get_file(e):
+    
+    def get_file():
         """
-        Returns the different paths of model_file, model_path and results_file
+        Returns the paths of model_file, model_path and results_file based on the local checkpoint path.
         """
-        model_file = f'models_diff/prior_diff_real_checkpoint{add_name}_n_{i}_epoch_{e}.cpkt'
-        model_path = os.path.join(base_path, model_file)
-        # print('Evaluate ', model_path)
+        model_path = checkpoint_local_path
+        model_file = os.path.basename(model_path)
         results_file = os.path.join(base_path,
-                                    f'models_diff/prior_diff_real_results{add_name}_n_{i}_epoch_{e}_{eval_addition}.pkl')
+                                    f'models_diff/prior_diff_real_results{add_name}_{model_file}.pkl')
         return model_file, model_path, results_file
 
-    def check_file(e):
-        model_file, model_path, results_file = get_file(e)
-        if not Path(model_path).is_file():  # or Path(results_file).is_file():
-            print('We have to download the TabPFN, as there is no checkpoint at ', model_path)
-            print('It has about 100MB, so this might take a moment.')
-            import requests
-            url = 'https://github.com/automl/TabPFN/raw/main/tabpfn/models_diff/prior_diff_real_checkpoint_n_0_epoch_42.cpkt'
-            r = requests.get(url, allow_redirects=True)
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)
-            open(model_path, 'wb').write(r.content)
+    def check_file():
+        model_file, model_path, results_file = get_file()
+        if not Path(model_path).is_file():
+            raise FileNotFoundError(f'Checkpoint not found at {model_path}. Vui lòng kiểm tra lại đường dẫn.')
         return model_file, model_path, results_file
 
-    model_file = None
-    if e == -1:
-        for e_ in [42] + list(range(100, -1, -1)):
-            model_file_, model_path_, results_file_ = check_file(e_)
-            if model_file_ is not None:
-                e = e_
-                model_file, model_path, results_file = model_file_, model_path_, results_file_
-                break
-    else:
-        model_file, model_path, results_file = check_file(e)
+    # Bỏ qua việc kiểm tra epoch và chỉ sử dụng checkpoint cục bộ
+    model_file, model_path, results_file = check_file()
 
-    if model_file is None:
-        model_file, model_path, results_file = get_file(e)
-        raise Exception('No checkpoint found at '+str(model_path))
-
-
-    #print(f'Loading {model_file}')
+    # Tải mô hình từ checkpoint cục bộ
     if only_inference:
-        # print('Loading model that can be used for inference only')
         model, c = load_model_only_inference(base_path, model_file, device)
     else:
-        #until now also only capable of inference
         model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
-    #model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
 
     return model, c, results_file
 
