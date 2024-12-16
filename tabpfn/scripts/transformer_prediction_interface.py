@@ -85,56 +85,50 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     models_in_memory = {}
 
-    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
-                 N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
-                 feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
-                 subsample_features=False):
+    def __init__(self, device='cpu', base_path='/kaggle/input/your-checkpoint-folder/', model_string='',
+                 checkpoint_filename='your_checkpoint.cpkt', N_ensemble_configurations=3, no_preprocess_mode=False,
+                 multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0,
+                 no_grad=True, batch_size_inference=32, subsample_features=False):
         """
-        Initializes the classifier and loads the model. 
-        Depending on the arguments, the model is either loaded from memory, from a file, or downloaded from the 
-        repository if no model is found.
-        
-        Can also be used to compute gradients with respect to the inputs X_train and X_test. Therefore no_grad has to be 
-        set to False and no_preprocessing_mode must be True. Furthermore, X_train and X_test need to be given as 
-        torch.Tensors and their requires_grad parameter must be set to True.
-        
-        
+        Initializes the classifier and loads the model from a local checkpoint.
+
         :param device: If the model should run on cuda or cpu.
-        :param base_path: Base path of the directory, from which the folders like models_diff can be accessed.
-        :param model_string: Name of the model. Used first to check if the model is already in memory, and if not, 
-               tries to load a model with that name from the models_diff directory. It looks for files named as 
-               follows: "prior_diff_real_checkpoint" + model_string + "_n_0_epoch_e.cpkt", where e can be a number 
-               between 100 and 0, and is checked in a descending order. 
-        :param N_ensemble_configurations: The number of ensemble configurations used for the prediction. Thereby the 
-               accuracy, but also the running time, increases with this number. 
+        :param base_path: Base path of the directory where the checkpoint is located.
+        :param model_string: Additional identifier for the model.
+        :param checkpoint_filename: Tên file checkpoint cục bộ.
+        :param N_ensemble_configurations: The number of ensemble configurations used for the prediction.
         :param no_preprocess_mode: Specifies whether preprocessing is to be performed.
-        :param multiclass_decoder: If set to permutation, randomly shifts the classes for each ensemble configuration. 
+        :param multiclass_decoder: If set to permutation, randomly shifts the classes for each ensemble configuration.
         :param feature_shift_decoder: If set to true shifts the features for each ensemble configuration according to a 
                random permutation.
         :param only_inference: Indicates if the model should be loaded to only restore inference capabilities or also 
-               training capabilities. Note that the training capabilities are currently not being fully restored.
-        :param seed: Seed that is used for the prediction. Allows for a deterministic behavior of the predictions.
-        :param batch_size_inference: This parameter is a trade-off between performance and memory consumption.
-               The computation done with different values for batch_size_inference is the same,
-               but it is split into smaller/larger batches.
-        :param no_grad: If set to false, allows for the computation of gradients with respect to X_train and X_test. 
-               For this to correctly function no_preprocessing_mode must be set to true.
-        :param subsample_features: If set to true and the number of features in the dataset exceeds self.max_features (100),
-                the features are subsampled to self.max_features.
+               training capabilities.
+        :param seed: Seed that is used for the prediction.
+        :param batch_size_inference: Trade-off between performance and memory consumption.
+        :param no_grad: If set to false, allows for the computation of gradients with respect to X_train and X_test.
+        :param subsample_features: If set to true and the number of features exceeds a maximum, features are subsampled.
         """
 
-        # Model file specification (Model name, Epoch)
+        # Model file specification
         i = 0
-        model_key = model_string+'|'+str(device)
+        model_key = model_string + '|' + str(device)
+        checkpoint_local_path = os.path.join(base_path, checkpoint_filename)
+
         if model_key in self.models_in_memory:
             model, c, results_file = self.models_in_memory[model_key]
         else:
-            model, c, results_file = load_model_workflow(i, -1, add_name=model_string, base_path=base_path, device=device,
-                                                         eval_addition='', only_inference=only_inference)
+            model, c, results_file = load_model_workflow(
+                i, e=None,  # e không cần thiết khi sử dụng checkpoint cục bộ
+                add_name=model_string,
+                base_path=base_path,
+                checkpoint_local_path=checkpoint_local_path,
+                device=device,
+                eval_addition='',
+                only_inference=only_inference
+            )
             self.models_in_memory[model_key] = (model, c, results_file)
             if len(self.models_in_memory) == 2:
                 print('Multiple models in memory. This might lead to memory issues. Consider calling remove_models_from_memory()')
-        #style, temperature = self.load_result_minimal(style_file, i, e)
 
         self.device = device
         self.model = model
