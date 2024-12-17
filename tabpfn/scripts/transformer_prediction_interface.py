@@ -85,20 +85,13 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     models_in_memory = {}
 
-    class TabPFNClassifier(BaseEstimator, ClassifierMixin):
-
-    models_in_memory = {}
-
     def __init__(self, device='cpu', base_path='/kaggle/input/your-checkpoint-folder/', model_string='',
                  checkpoint_filename='prior_diff_real_checkpoint_n_0_epoch_42.cpkt', N_ensemble_configurations=3,
                  no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True,
                  only_inference=True, seed=0, no_grad=True, batch_size_inference=32, subsample_features=False):
         """
         Initializes the classifier and loads the model from a local checkpoint.
-
-        Các tham số như đã mô tả trước đó.
         """
-
         # Model file specification
         i = 0
         model_key = model_string + '|' + str(device)
@@ -148,7 +141,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
         self.batch_size_inference = batch_size_inference
 
-
     def remove_models_from_memory(self):
         self.models_in_memory = {}
 
@@ -175,11 +167,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
     def fit(self, X, y, overwrite_warning=False):
         """
         Validates the training set and stores it.
-
-        If clf.no_grad (default is True):
-        X, y should be of type np.array
-        else:
-        X should be of type torch.Tensors (y can be np.array or torch.Tensor)
         """
         if self.no_grad:
             # Check that X and y have correct shape
@@ -202,7 +189,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         if X.shape[0] > 1024 and not overwrite_warning:
             raise ValueError("⚠️ WARNING: TabPFN is not made for datasets with a trainingsize > 1024. Prediction might take a while, be less reliable. We advise not to run datasets > 10k samples, which might lead to your machine crashing (due to quadratic memory scaling of TabPFN). Please confirm you want to run by passing overwrite_warning=True to the fit function.")
 
-
         # Return the classifier
         return self
 
@@ -210,7 +196,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         """
         Predict the probabilities for the input X depending on the training set previously passed in the method fit.
         """
-        # Check is fit had been called
+        # Check if fit had been called
         check_is_fitted(self)
 
         # Input validation
@@ -231,7 +217,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
         eval_pos = self.X_.shape[0]
 
-        # Sử dụng self.model thay vì self.model[2]
+        # Sử dụng self.model trực tiếp
         prediction = transformer_predict(
             self.model,  # Sửa ở đây
             X_full,
@@ -265,6 +251,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
             return y, p.max(axis=-1)
         return y
 
+
 import time
 def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         device='cpu',
@@ -291,7 +278,29 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         return_logits=False,
                         **kwargs):
     """
-    Hàm dự đoán của TabPFN.
+
+    :param model:
+    :param eval_xs:
+    :param eval_ys:
+    :param eval_position:
+    :param rescale_features:
+    :param device:
+    :param max_features:
+    :param style:
+    :param inference_mode:
+    :param num_classes:
+    :param extend_features:
+    :param normalize_to_ranking:
+    :param softmax_temperature:
+    :param multiclass_decoder:
+    :param preprocess_transform:
+    :param categorical_feats:
+    :param feature_shift_decoder:
+    :param N_ensemble_configurations:
+    :param average_logits:
+    :param normalize_with_sqrt:
+    :param metric_used:
+    :return:
     """
     num_classes = len(torch.unique(eval_ys))
 
@@ -309,6 +318,14 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             output = output[:, :, 0:num_classes] / torch.exp(softmax_temperature)
             if not return_logits:
                 output = torch.nn.functional.softmax(output, dim=-1)
+            #else:
+            #    output[:, :, 1] = model((style.repeat(eval_xs.shape[1], 1) if style is not None else None, eval_xs, eval_ys.float()),
+            #               single_eval_pos=eval_position)
+
+            #    output[:, :, 1] = torch.sigmoid(output[:, :, 1]).squeeze(-1)
+            #    output[:, :, 0] = 1 - output[:, :, 1]
+
+        #print('RESULTS', eval_ys.shape, torch.unique(eval_ys, return_counts=True), output.mean(axis=0))
 
         return output
 
