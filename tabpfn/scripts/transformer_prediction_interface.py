@@ -219,7 +219,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
         # Sử dụng self.model trực tiếp
         prediction = transformer_predict(
-            self.model,  # Sửa ở đây
+            self.model[2],  # Sửa ở đây
             X_full,
             y_full,
             eval_pos,
@@ -514,3 +514,19 @@ def get_params_from_config(c):
         , 'normalize_to_ranking': c["normalize_to_ranking"]
         , 'normalize_with_sqrt': c.get("normalize_with_sqrt", False)
             }
+
+if __name__ == "__main__":
+    # Test the classifier
+    clf = TabPFNClassifier(
+        device='cuda',
+        N_ensemble_configurations=32,
+        base_path='D:/d_python_projects/TabPFN/tabpfn/models_diff/',
+        model_string='model_identifier',  # Nếu cần thiết
+        checkpoint_filename='prior_diff_real_checkpoint_n_0_epoch_42.cpkt',
+        only_inference=True
+    )   
+    X = np.random.rand(100, 100)
+    y = np.random.randint(0, 2, 100)
+
+    clf.fit(X, y)
+    print(clf.predict(X))
