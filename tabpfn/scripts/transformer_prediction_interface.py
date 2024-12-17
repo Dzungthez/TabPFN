@@ -85,28 +85,18 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     models_in_memory = {}
 
+    class TabPFNClassifier(BaseEstimator, ClassifierMixin):
+
+    models_in_memory = {}
+
     def __init__(self, device='cpu', base_path='/kaggle/input/your-checkpoint-folder/', model_string='',
-                 checkpoint_filename='your_checkpoint.cpkt', N_ensemble_configurations=3, no_preprocess_mode=False,
-                 multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0,
-                 no_grad=True, batch_size_inference=32, subsample_features=False):
+                 checkpoint_filename='prior_diff_real_checkpoint_n_0_epoch_42.cpkt', N_ensemble_configurations=3,
+                 no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True,
+                 only_inference=True, seed=0, no_grad=True, batch_size_inference=32, subsample_features=False):
         """
         Initializes the classifier and loads the model from a local checkpoint.
 
-        :param device: If the model should run on cuda or cpu.
-        :param base_path: Base path of the directory where the checkpoint is located.
-        :param model_string: Additional identifier for the model.
-        :param checkpoint_filename: Tên file checkpoint cục bộ.
-        :param N_ensemble_configurations: The number of ensemble configurations used for the prediction.
-        :param no_preprocess_mode: Specifies whether preprocessing is to be performed.
-        :param multiclass_decoder: If set to permutation, randomly shifts the classes for each ensemble configuration.
-        :param feature_shift_decoder: If set to true shifts the features for each ensemble configuration according to a 
-               random permutation.
-        :param only_inference: Indicates if the model should be loaded to only restore inference capabilities or also 
-               training capabilities.
-        :param seed: Seed that is used for the prediction.
-        :param batch_size_inference: Trade-off between performance and memory consumption.
-        :param no_grad: If set to false, allows for the computation of gradients with respect to X_train and X_test.
-        :param subsample_features: If set to true and the number of features exceeds a maximum, features are subsampled.
+        Các tham số như đã mô tả trước đó.
         """
 
         # Model file specification
@@ -115,10 +105,11 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         checkpoint_local_path = os.path.join(base_path, checkpoint_filename)
 
         if model_key in self.models_in_memory:
-            model, c, results_file = self.models_in_memory[model_key]
+            self.model, self.c, self.results_file = self.models_in_memory[model_key]
         else:
-            model, c, results_file = load_model_workflow(
-                i, e=None,  # e không cần thiết khi sử dụng checkpoint cục bộ
+            self.model, self.c, self.results_file = load_model_workflow(
+                i=i,
+                e=None,  # e không cần thiết khi sử dụng checkpoint cục bộ
                 add_name=model_string,
                 base_path=base_path,
                 checkpoint_local_path=checkpoint_local_path,
@@ -126,13 +117,12 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                 eval_addition='',
                 only_inference=only_inference
             )
-            self.models_in_memory[model_key] = (model, c, results_file)
+            self.models_in_memory[model_key] = (self.model, self.c, self.results_file)
             if len(self.models_in_memory) == 2:
                 print('Multiple models in memory. This might lead to memory issues. Consider calling remove_models_from_memory()')
 
+        # Thiết lập các thuộc tính khác
         self.device = device
-        self.model = model
-        self.c = c
         self.style = None
         self.temperature = None
         self.N_ensemble_configurations = N_ensemble_configurations
@@ -157,6 +147,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
             "If no_grad is false, no_preprocess_mode must be true, because otherwise no gradient can be computed."
 
         self.batch_size_inference = batch_size_inference
+
 
     def remove_models_from_memory(self):
         self.models_in_memory = {}
@@ -218,9 +209,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X, normalize_with_test=False, return_logits=False):
         """
         Predict the probabilities for the input X depending on the training set previously passed in the method fit.
-
-        If no_grad is true in the classifier the function takes X as a numpy.ndarray. If no_grad is false X must be a
-        torch tensor and is not fully checked.
         """
         # Check is fit had been called
         check_is_fitted(self)
@@ -236,29 +224,35 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
             X_full = torch.cat((self.X_, X), dim=0).float().unsqueeze(1).to(self.device)
 
             if int(torch.isnan(X_full).sum()):
-                print('X contains nans and the gradient implementation is not designed to handel nans.')
+                print('X contains nans and the gradient implementation is not designed to handle nans.')
 
         y_full = np.concatenate([self.y_, np.zeros(shape=X.shape[0])], axis=0)
         y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
 
         eval_pos = self.X_.shape[0]
 
-        prediction = transformer_predict(self.model[2], X_full, y_full, eval_pos,
-                                         device=self.device,
-                                         style=self.style,
-                                         inference_mode=True,
-                                         preprocess_transform='none' if self.no_preprocess_mode else 'mix',
-                                         normalize_with_test=normalize_with_test,
-                                         N_ensemble_configurations=self.N_ensemble_configurations,
-                                         softmax_temperature=self.temperature,
-                                         multiclass_decoder=self.multiclass_decoder,
-                                         feature_shift_decoder=self.feature_shift_decoder,
-                                         differentiable_hps_as_style=self.differentiable_hps_as_style,
-                                         seed=self.seed,
-                                         return_logits=return_logits,
-                                         no_grad=self.no_grad,
-                                         batch_size_inference=self.batch_size_inference,
-                                         **get_params_from_config(self.c))
+        # Sử dụng self.model thay vì self.model[2]
+        prediction = transformer_predict(
+            self.model,  # Sửa ở đây
+            X_full,
+            y_full,
+            eval_pos,
+            device=self.device,
+            style=self.style,
+            inference_mode=True,
+            preprocess_transform='none' if self.no_preprocess_mode else 'mix',
+            normalize_with_test=normalize_with_test,
+            N_ensemble_configurations=self.N_ensemble_configurations,
+            softmax_temperature=self.temperature,
+            multiclass_decoder=self.multiclass_decoder,
+            feature_shift_decoder=self.feature_shift_decoder,
+            differentiable_hps_as_style=self.differentiable_hps_as_style,
+            seed=self.seed,
+            return_logits=return_logits,
+            no_grad=self.no_grad,
+            batch_size_inference=self.batch_size_inference,
+            **get_params_from_config(self.c)
+        )
         prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
 
         return prediction_.detach().cpu().numpy() if self.no_grad else prediction_
@@ -297,29 +291,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         return_logits=False,
                         **kwargs):
     """
-
-    :param model:
-    :param eval_xs:
-    :param eval_ys:
-    :param eval_position:
-    :param rescale_features:
-    :param device:
-    :param max_features:
-    :param style:
-    :param inference_mode:
-    :param num_classes:
-    :param extend_features:
-    :param normalize_to_ranking:
-    :param softmax_temperature:
-    :param multiclass_decoder:
-    :param preprocess_transform:
-    :param categorical_feats:
-    :param feature_shift_decoder:
-    :param N_ensemble_configurations:
-    :param average_logits:
-    :param normalize_with_sqrt:
-    :param metric_used:
-    :return:
+    Hàm dự đoán của TabPFN.
     """
     num_classes = len(torch.unique(eval_ys))
 
@@ -337,14 +309,6 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             output = output[:, :, 0:num_classes] / torch.exp(softmax_temperature)
             if not return_logits:
                 output = torch.nn.functional.softmax(output, dim=-1)
-            #else:
-            #    output[:, :, 1] = model((style.repeat(eval_xs.shape[1], 1) if style is not None else None, eval_xs, eval_ys.float()),
-            #               single_eval_pos=eval_position)
-
-            #    output[:, :, 1] = torch.sigmoid(output[:, :, 1]).squeeze(-1)
-            #    output[:, :, 0] = 1 - output[:, :, 1]
-
-        #print('RESULTS', eval_ys.shape, torch.unique(eval_ys, return_counts=True), output.mean(axis=0))
 
         return output
 
